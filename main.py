@@ -3,14 +3,16 @@ import telebot
 # Your bot token
 TOKEN = "7957967714:AAErDKh6PfLHw6dwTsMH1AGtNd9eGMS13qU"
 
-# Target user ID
-USER_ID = 6264741586
-
 # Initialize bot
 bot = telebot.TeleBot(TOKEN)
 
-# Send "Hello" when the script starts
-bot.send_message(USER_ID, "Hello")
+# Send "Hello" when the bot starts
+bot.send_message(6264741586, "Hello")
 
-# Keep bot alive (to avoid the script exiting)
+# Command handler for "INFO" (case-insensitive)
+@bot.message_handler(func=lambda message: message.text and message.text.strip().lower() == "info")
+def send_info(message):
+    bot.reply_to(message, "HELLO DEVELOPMENT IS ONGOING")
+
+# Keep bot running
 bot.polling()
