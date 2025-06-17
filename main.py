@@ -36,7 +36,7 @@ def send_daily_price():
         print(f"Error sending daily price: {e}")
 
 # Schedule the job at 9:00 AM every day
-schedule.every().day.at("09:00").do(send_daily_price)
+schedule.every().day.at("21:00").do(send_daily_price)
 
 @bot.message_handler(commands=['info'])
 def handle_info(message):
