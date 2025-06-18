@@ -1,3 +1,4 @@
 pyTelegramBotAPI
 bs4
+cloudscraper
 schedule
