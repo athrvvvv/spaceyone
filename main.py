@@ -1,5 +1,5 @@
 import telebot
-import requests
+import cloudscraper
 from bs4 import BeautifulSoup
 import schedule
 import time
@@ -12,15 +12,9 @@ bot = telebot.TeleBot(TOKEN)
 
 def price():
     url = "https://www.incredible.co.za/soundcore-space-one-headphone-black"
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                      "AppleWebKit/537.36 (KHTML, like Gecko) "
-                      "Chrome/114.0.0.0 Safari/537.36",
-        "Accept-Language": "en-US,en;q=0.9",
-        "Referer": "https://www.incredible.co.za/"
-    }
+    scraper = cloudscraper.create_scraper()  # Handles Cloudflare & anti-bot protection
     try:
-        response = requests.get(url, headers=headers)
+        response = scraper.get(url)
         if response.status_code == 200:
             soup = BeautifulSoup(response.text, "html.parser")
             price_elements = soup.find_all("span", class_="price")
@@ -31,9 +25,6 @@ def price():
             else:
                 print("❌ Less than 3 prices found on the page.")
                 return "Price not found"
-        elif response.status_code == 403:
-            print("❌ Access forbidden (403). Try updating headers or using proxies.")
-            return "Access forbidden"
         else:
             print(f"❌ Failed to fetch page. Status code: {response.status_code}")
             return "Failed to fetch price"
