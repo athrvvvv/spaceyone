@@ -13,9 +13,9 @@ print(TOKEN)
 USER_ID = 6264741586
 
 bot = telebot.TeleBot(TOKEN)
-
+url = "https://www.incredible.co.za/soundcore-space-one-headphone-black"
 def price():
-    url = "https://www.incredible.co.za/soundcore-space-one-headphone-black"
+    # url = "https://www.incredible.co.za/soundcore-space-one-headphone-black"
     scraper = cloudscraper.create_scraper()  # Handles Cloudflare & anti-bot protection
     try:
         response = scraper.get(url)
@@ -50,7 +50,7 @@ schedule.every().day.at("21:00").do(send_daily_price)
 def handle_info(message):
     if message.from_user.id == USER_ID:
         p = price()
-        bot.reply_to(message, f"Price Found to be: {p} ✅")
+        bot.reply_to(message, f"Price Found to be: {p} ✅",url)
 
 def run_schedule():
     while True:
