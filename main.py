@@ -2,10 +2,13 @@ import telebot
 import cloudscraper
 from bs4 import BeautifulSoup
 import schedule
+
 import time
 import threading
+import os
 
-TOKEN = "7957967714:AAErDKh6PfLHw6dwTsMH1AGtNd9eGMS13qU"
+tele_token = os.environ.get("TELE")
+TOKEN = tele_token
 USER_ID = 6264741586
 
 bot = telebot.TeleBot(TOKEN)
