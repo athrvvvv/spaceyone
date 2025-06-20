@@ -8,7 +8,8 @@ import threading
 import os
 
 tele_token = os.environ.get("TELE")
-TOKEN = tele_token
+TOKEN = str(tele_token)
+print(TOKEN)
 USER_ID = 6264741586
 
 bot = telebot.TeleBot(TOKEN)
