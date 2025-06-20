@@ -50,7 +50,7 @@ schedule.every().day.at("21:00").do(send_daily_price)
 def handle_info(message):
     if message.from_user.id == USER_ID:
         p = price()
-        bot.reply_to(message, f"Price Found to be: {p} ✅",url)
+        bot.reply_to(message, f"Price Found to be: {p} ✅\n🛜 {url}")
 
 def run_schedule():
     while True:
