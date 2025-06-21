@@ -1,13 +1,13 @@
 import telebot
 import cloudscraper
 from bs4 import BeautifulSoup
-import schedule
 import time
 import threading
 import os
+from datetime import datetime
 
 # Telegram Setup
-tele_token = os.environ.get("TELE")
+tele_token = os.environ.get("TELE")  # Make sure your TELE secret is set
 TOKEN = str(tele_token)
 print("Telegram Bot Token:", TOKEN)
 USER_ID = 6264741586
@@ -36,14 +36,14 @@ def price():
             print("❌ Failed to fetch Incredible page.")
             return "Failed to fetch price"
     except Exception as e:
-        print("❌ Error:", e)
+        print("❌ Error fetching Incredible price:", e)
         return "Error fetching price"
 
-# ✅ Amazon Price Scraper (Your Logic)
+# ✅ Amazon Price Scraper using short URL logic
 def get_amazon_price(short_url):
     scraper = cloudscraper.create_scraper()
     try:
-        # Resolve redirect
+        # Resolve redirect to full URL
         response = scraper.get(short_url, allow_redirects=True)
         product_url = response.url
 
@@ -51,7 +51,7 @@ def get_amazon_price(short_url):
         res = scraper.get(product_url)
         soup = BeautifulSoup(res.content, "html.parser")
 
-        # Try various price selectors
+        # Try common Amazon price selectors
         price = None
         selectors = [
             '#priceblock_ourprice',
@@ -71,26 +71,33 @@ def get_amazon_price(short_url):
         print("❌ Amazon exception:", e)
         return "Error fetching Amazon price"
 
-# 📦 Daily Price Update
-def send_daily_price():
-    try:
-        inc_price = price()
-        ama_price = get_amazon_price(amazon_short_url)
-        bot.send_message(USER_ID,
-            f"📦 *Daily Price Update*\n\n"
-            f"💰 *Incredible:* `{inc_price}`\n"
-            f"🛍️ [Incredible Product]({incredible_url})\n\n"
-            f"💸 *Amazon:* `{ama_price}`\n"
-            f"🎧 [JBL Tune Live - Amazon]({amazon_short_url})",
-            parse_mode="Markdown"
-        )
-    except Exception as e:
-        print("Error sending daily price:", e)
+# 📨 One-time Scheduled Message (for 4 July 2025 at 09:00 AM)
+target_date = datetime(2025, 7, 4, 9, 0)
 
-# ⏰ Scheduler Setup
-schedule.every().day.at("21:00").do(send_daily_price)
+def run_schedule_once():
+    sent = False
+    while not sent:
+        now = datetime.now()
+        if now >= target_date:
+            try:
+                inc_price = price()
+                ama_price = get_amazon_price(amazon_short_url)
+                bot.send_message(USER_ID,
+                    f"📦 *Special Price Update*\n\n"
+                    f"💰 *Incredible:* `{inc_price}`\n"
+                    f"🛍️ [Soundcore Space One - Incredible]({incredible_url})\n\n"
+                    f"💸 *Amazon:* `{ama_price}`\n"
+                    f"🎧 [JBL Tune Live - Amazon]({amazon_short_url})",
+                    parse_mode="Markdown"
+                )
+                sent = True
+                print("✅ Message sent on scheduled time.")
+            except Exception as e:
+                print("❌ Failed to send scheduled message:", e)
+            break
+        time.sleep(30)
 
-# 📩 Telegram Command
+# 📩 /info command handler
 @bot.message_handler(commands=['info'])
 def handle_info(message):
     if message.from_user.id == USER_ID:
@@ -105,15 +112,9 @@ def handle_info(message):
             parse_mode="Markdown"
         )
 
-# 🌀 Schedule Thread
-def run_schedule():
-    while True:
-        schedule.run_pending()
-        time.sleep(30)
-
 # 🚀 Startup
 if __name__ == "__main__":
-    threading.Thread(target=run_schedule, daemon=True).start()
+    threading.Thread(target=run_schedule_once, daemon=True).start()
     try:
         bot.send_message(USER_ID, "Bot started successfully 🚀")
     except Exception as e:
