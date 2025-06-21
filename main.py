@@ -1,13 +1,16 @@
 import telebot
 import cloudscraper
 from bs4 import BeautifulSoup
+import schedule
 import time
 import threading
 import os
+import json
+import re
 from datetime import datetime
 
 # Telegram Setup
-tele_token = os.environ.get("TELE")  # Make sure your TELE secret is set
+tele_token = os.environ.get("TELE")  # Make sure to set your TELE token as an environment variable
 TOKEN = str(tele_token)
 print("Telegram Bot Token:", TOKEN)
 USER_ID = 6264741586
@@ -17,7 +20,27 @@ bot = telebot.TeleBot(TOKEN)
 incredible_url = "https://www.incredible.co.za/soundcore-space-one-headphone-black"
 amazon_short_url = "https://amzn.eu/d/73fgzvN"
 
-# ✅ Incredible Price Scraper
+# ========================== Price Utilities ==========================
+def load_price_data():
+    if os.path.exists("price_data.json"):
+        with open("price_data.json", "r") as f:
+            return json.load(f)
+    return {}
+
+def save_price_data(data):
+    with open("price_data.json", "w") as f:
+        json.dump(data, f)
+
+def extract_numeric_price(price_str):
+    if not price_str or not isinstance(price_str, str):
+        return float('inf')
+    price_str = re.sub(r'[^\d.,]', '', price_str).replace(",", "")
+    try:
+        return float(price_str)
+    except:
+        return float('inf')
+
+# ========================== Scrapers ==========================
 def price():
     scraper = cloudscraper.create_scraper()
     try:
@@ -39,7 +62,6 @@ def price():
         print("❌ Error fetching Incredible price:", e)
         return "Error fetching price"
 
-# ✅ Amazon Price Scraper using short URL logic
 def get_amazon_price(short_url):
     scraper = cloudscraper.create_scraper()
     try:
@@ -71,7 +93,7 @@ def get_amazon_price(short_url):
         print("❌ Amazon exception:", e)
         return "Error fetching Amazon price"
 
-# 📨 One-time Scheduled Message (for 4 July 2025 at 09:00 AM)
+# ========================== Scheduled One-Time Alert ==========================
 target_date = datetime(2025, 7, 4, 9, 0)
 
 def run_schedule_once():
@@ -80,31 +102,68 @@ def run_schedule_once():
         now = datetime.now()
         if now >= target_date:
             try:
-                inc_price = price()
-                ama_price = get_amazon_price(amazon_short_url)
-                bot.send_message(USER_ID,
-                    f"📦 *Special Price Update*\n\n"
-                    f"💰 *Incredible:* `{inc_price}`\n"
-                    f"🛍️ [Soundcore Space One - Incredible]({incredible_url})\n\n"
-                    f"💸 *Amazon:* `{ama_price}`\n"
-                    f"🎧 [JBL Tune Live - Amazon]({amazon_short_url})",
-                    parse_mode="Markdown"
-                )
+                # Current prices
+                inc_price_raw = price()
+                ama_price_raw = get_amazon_price(amazon_short_url)
+                inc_price_val = extract_numeric_price(inc_price_raw)
+                ama_price_val = extract_numeric_price(ama_price_raw)
+
+                # Load previous prices
+                prev_prices = load_price_data()
+                prev_inc = prev_prices.get("incredible", None)
+                prev_ama = prev_prices.get("amazon", None)
+
+                message = ""
+                send = False
+
+                # Compare Incredible price
+                if prev_inc is None or inc_price_val != prev_inc:
+                    direction = "⬇ Dropped" if prev_inc and inc_price_val < prev_inc else "⬆ Increased"
+                    message += (
+                        f"💰 *Incredible Price {direction}!*\n"
+                        f"Was: `{prev_inc if prev_inc is not None else 'N/A'}` → Now: `{inc_price_raw}`\n"
+                        f"🛍️ [Soundcore Space One - Incredible]({incredible_url})\n\n"
+                    )
+                    send = True
+
+                # Compare Amazon price
+                if prev_ama is None or ama_price_val != prev_ama:
+                    direction = "⬇ Dropped" if prev_ama and ama_price_val < prev_ama else "⬆ Increased"
+                    message += (
+                        f"💸 *Amazon Price {direction}!*\n"
+                        f"Was: `{prev_ama if prev_ama is not None else 'N/A'}` → Now: `{ama_price_raw}`\n"
+                        f"🎧 [JBL Tune Live - Amazon]({amazon_short_url})\n"
+                    )
+                    send = True
+
+                # Send if any change
+                if send:
+                    bot.send_message(USER_ID, f"🔔 *Price Change Alert!*\n\n{message}", parse_mode="Markdown")
+
+                    # Save new prices
+                    new_data = {
+                        "incredible": inc_price_val,
+                        "amazon": ama_price_val
+                    }
+                    save_price_data(new_data)
+                    print("✅ Alert sent and prices updated.")
+                else:
+                    print("ℹ No price change detected. No alert sent.")
+
                 sent = True
-                print("✅ Message sent on scheduled time.")
             except Exception as e:
-                print("❌ Failed to send scheduled message:", e)
+                print("❌ Error during price check:", e)
             break
         time.sleep(30)
 
-# 📩 /info command handler
+# ========================== /info Command ==========================
 @bot.message_handler(commands=['info'])
 def handle_info(message):
     if message.from_user.id == USER_ID:
         inc_price = price()
         ama_price = get_amazon_price(amazon_short_url)
         bot.reply_to(message,
-            f"🔔 *Price Updates Found!*\n\n"
+            f"🔔 *Price Info*\n\n"
             f"💰 *Incredible:* `{inc_price}`\n"
             f"🛍️ [Soundcore Space One - Incredible]({incredible_url})\n\n"
             f"💸 *Amazon:* `{ama_price}`\n"
@@ -112,7 +171,7 @@ def handle_info(message):
             parse_mode="Markdown"
         )
 
-# 🚀 Startup
+# ========================== App Start ==========================
 if __name__ == "__main__":
     threading.Thread(target=run_schedule_once, daemon=True).start()
     try:
