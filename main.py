@@ -1,7 +1,6 @@
 import telebot
 import cloudscraper
 from bs4 import BeautifulSoup
-import schedule
 import time
 import threading
 import os
@@ -10,7 +9,7 @@ import re
 from datetime import datetime
 
 # Telegram Setup
-tele_token = os.environ.get("TELE")  # Make sure to set your TELE token as an environment variable
+tele_token = os.environ.get("TELE")
 TOKEN = str(tele_token)
 print("Telegram Bot Token:", TOKEN)
 USER_ID = 6264741586
@@ -20,7 +19,7 @@ bot = telebot.TeleBot(TOKEN)
 incredible_url = "https://www.incredible.co.za/soundcore-space-one-headphone-black"
 amazon_short_url = "https://amzn.eu/d/73fgzvN"
 
-# ========================== Price Utilities ==========================
+# Utilities
 def load_price_data():
     if os.path.exists("price_data.json"):
         with open("price_data.json", "r") as f:
@@ -40,7 +39,7 @@ def extract_numeric_price(price_str):
     except:
         return float('inf')
 
-# ========================== Scrapers ==========================
+# Scrapers
 def price():
     scraper = cloudscraper.create_scraper()
     try:
@@ -65,22 +64,19 @@ def price():
 def get_amazon_price(short_url):
     scraper = cloudscraper.create_scraper()
     try:
-        # Resolve redirect to full URL
         response = scraper.get(short_url, allow_redirects=True)
         product_url = response.url
 
-        # Fetch full product page
         res = scraper.get(product_url)
         soup = BeautifulSoup(res.content, "html.parser")
 
-        # Try common Amazon price selectors
-        price = None
         selectors = [
             '#priceblock_ourprice',
             '#priceblock_dealprice',
             '#priceblock_saleprice',
             '.a-price .a-offscreen'
         ]
+        price = None
         for selector in selectors:
             el = soup.select_one(selector)
             if el and el.text.strip():
@@ -93,22 +89,62 @@ def get_amazon_price(short_url):
         print("❌ Amazon exception:", e)
         return "Error fetching Amazon price"
 
-# ========================== Scheduled One-Time Alert ==========================
-target_date = datetime(2025, 7, 4, 9, 0)
+# Periodic price check every 2 hours - alerts only on drops
+def run_periodic_price_check():
+    while True:
+        try:
+            inc_price_raw = price()
+            ama_price_raw = get_amazon_price(amazon_short_url)
+            inc_price_val = extract_numeric_price(inc_price_raw)
+            ama_price_val = extract_numeric_price(ama_price_raw)
 
-def run_schedule_once():
-    sent = False
-    while not sent:
+            prev_prices = load_price_data()
+            prev_inc = prev_prices.get("incredible", float('inf'))
+            prev_ama = prev_prices.get("amazon", float('inf'))
+
+            messages = []
+
+            if inc_price_val < prev_inc:
+                messages.append(
+                    f"💰 *Incredible Price Dropped!*\nWas: `{prev_inc}` → Now: `{inc_price_raw}`\n"
+                    f"🛍️ [Soundcore Space One - Incredible]({incredible_url})"
+                )
+                prev_prices["incredible"] = inc_price_val
+
+            if ama_price_val < prev_ama:
+                messages.append(
+                    f"💸 *Amazon Price Dropped!*\nWas: `{prev_ama}` → Now: `{ama_price_raw}`\n"
+                    f"🎧 [JBL Tune Live - Amazon]({amazon_short_url})"
+                )
+                prev_prices["amazon"] = ama_price_val
+
+            if messages:
+                msg_text = "🔔 *Price Drop Alert!*\n\n" + "\n\n".join(messages)
+                bot.send_message(USER_ID, msg_text, parse_mode="Markdown")
+                save_price_data(prev_prices)
+                print("✅ Price drop alert sent.")
+            else:
+                print("ℹ No price drop detected.")
+
+        except Exception as e:
+            print("❌ Error checking prices:", e)
+
+        time.sleep(2 * 60 * 60)  # 2 hours
+
+# One-time alert on 4th July 2025 09:00 — alerts on any price change (up/down)
+def run_one_time_alert():
+    alerted = False
+    target_date = datetime(2025, 7, 4, 9, 0)
+
+    while not alerted:
         now = datetime.now()
         if now >= target_date:
             try:
-                # Current prices
                 inc_price_raw = price()
                 ama_price_raw = get_amazon_price(amazon_short_url)
                 inc_price_val = extract_numeric_price(inc_price_raw)
                 ama_price_val = extract_numeric_price(ama_price_raw)
 
-                # Load previous prices
                 prev_prices = load_price_data()
                 prev_inc = prev_prices.get("incredible", None)
                 prev_ama = prev_prices.get("amazon", None)
@@ -116,7 +152,7 @@ def run_schedule_once():
                 message = ""
                 send = False
 
-                # Compare Incredible price
+                # Check Incredible price change
                 if prev_inc is None or inc_price_val != prev_inc:
                     direction = "⬇ Dropped" if prev_inc and inc_price_val < prev_inc else "⬆ Increased"
                     message += (
@@ -126,7 +162,7 @@ def run_schedule_once():
                     )
                     send = True
 
-                # Compare Amazon price
+                # Check Amazon price change
                 if prev_ama is None or ama_price_val != prev_ama:
                     direction = "⬇ Dropped" if prev_ama and ama_price_val < prev_ama else "⬆ Increased"
                     message += (
@@ -136,27 +172,27 @@ def run_schedule_once():
                     )
                     send = True
 
-                # Send if any change
                 if send:
                     bot.send_message(USER_ID, f"🔔 *Price Change Alert!*\n\n{message}", parse_mode="Markdown")
 
-                    # Save new prices
                     new_data = {
                         "incredible": inc_price_val,
                         "amazon": ama_price_val
                     }
                     save_price_data(new_data)
-                    print("✅ Alert sent and prices updated.")
+                    print("✅ One-time alert sent and prices updated.")
                 else:
-                    print("ℹ No price change detected. No alert sent.")
+                    print("ℹ No price change detected for one-time alert.")
 
-                sent = True
+                alerted = True
+
             except Exception as e:
-                print("❌ Error during price check:", e)
-            break
-        time.sleep(30)
+                print("❌ Error in one-time alert:", e)
+                # Optionally wait some before retrying
 
-# ========================== /info Command ==========================
+        time.sleep(30)  # Check every 30 seconds if time reached
+
+# Telegram /info command
 @bot.message_handler(commands=['info'])
 def handle_info(message):
     if message.from_user.id == USER_ID:
@@ -171,9 +207,10 @@ def handle_info(message):
             parse_mode="Markdown"
         )
 
-# ========================== App Start ==========================
+# Main app start
 if __name__ == "__main__":
-    threading.Thread(target=run_schedule_once, daemon=True).start()
+    threading.Thread(target=run_periodic_price_check, daemon=True).start()
+    threading.Thread(target=run_one_time_alert, daemon=True).start()
     try:
         bot.send_message(USER_ID, "Bot started successfully 🚀")
     except Exception as e:
